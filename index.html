@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tradutor de Voz Universal</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            max-width: 620px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: #4f46e5;
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
+        .header p { margin: 8px 0 0; opacity: 0.9; }
+
+        .content { padding: 30px; }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #555;
+        }
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin: 20px 0;
+        }
+        button {
+            flex: 1;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: 600;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #btn-falar {
+            background: #10b981;
+            color: white;
+        }
+        #btn-falar:hover { background: #059669; }
+        #btn-parar {
+            background: #ef4444;
+            color: white;
+        }
+        #btn-parar:hover { background: #dc2626; }
+
+        .box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 20px;
+            min-height: 80px;
+        }
+        .box strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #4f46e5;
+        }
+        #status {
+            text-align: center;
+            font-weight: 600;
+            margin: 15px 0;
+            min-height: 28px;
+            font-size: 17px;
+        }
+        .listening { color: #10b981; }
+        .translating { color: #f59e0b; }
+        .ready { color: #64748b; }
+        .error { color: #ef4444; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🌍 Tradutor de Voz Universal</h1>
+        <p>Fale em qualquer idioma • Tradução em tempo real</p>
+    </div>
+    
+    <div class="content">
+        <div class="controls">
+            <div>
+                <label>Idioma de entrada (reconhecimento)</label>
+                <select id="lang-input">
+                    <option value="pt-BR" selected>Português (Brasil)</option>
+                    <option value="en-US">English (USA)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="es-ES">Español</option>
+                    <option value="fr-FR">Français</option>
+                    <option value="de-DE">Deutsch</option>
+                    <option value="it-IT">Italiano</option>
+                    <option value="ru-RU">Русский</option>
+                    <option value="zh-CN">中文 (Simplificado)</option>
+                    <option value="ja-JP">日本語</option>
+                </select>
+            </div>
+            <div>
+                <label>Idioma de tradução (saída)</label>
+                <select id="lang-output">
+                    <option value="en-GB" selected>Inglês (GB)</option>
+                    <option value="pt-BR">Português (Brasil)</option>
+                    <option value="es-ES">Español</option>
+                    <option value="fr-FR">Français</option>
+                    <option value="de-DE">Deutsch</option>
+                    <option value="it-IT">Italiano</option>
+                    <option value="ru-RU">Русский</option>
+                    <option value="zh-CN">中文 (Simplificado)</option>
+                    <option value="ja-JP">日本語</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button id="btn-falar">🎤 Ligar Microfone (Modo Contínuo)</button>
+            <button id="btn-parar" style="display:none;">⏹️ Desligar Microfone</button>
+        </div>
+
+        <div id="status" class="ready">Pronto — Clique em Ligar Microfone</div>
+
+        <div class="box">
+            <strong>Você disse:</strong>
+            <p id="texto-original">-</p>
+        </div>
+        
+        <div class="box" style="background: #eef2ff;">
+            <strong>Tradução:</strong>
+            <p id="texto-traduzido">-</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const btnLigar = document.getElementById('btn-falar');
+    const btnParar = document.getElementById('btn-parar');
+    const originalDisplay = document.getElementById('texto-original');
+    const traduzidoDisplay = document.getElementById('texto-traduzido');
+    const status = document.getElementById('status');
+    const langInputSelect = document.getElementById('lang-input');
+    const langOutputSelect = document.getElementById('lang-output');
+
+    let recognition;
+    let isListening = false;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        status.innerHTML = '<span class="error">Seu navegador não suporta reconhecimento de voz.</span>';
+        btnLigar.disabled = true;
+    } else {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;        // Mantém ouvindo
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+    }
+
+    function startListening() {
+        if (!recognition) return;
+        
+        const langInput = langInputSelect.value;
+        recognition.lang = langInput;
+
+        try {
+            recognition.start();
+            isListening = true;
+            btnLigar.style.display = 'none';
+            btnParar.style.display = 'block';
+            status.innerHTML = '<span class="listening">🎙️ Ouvindo... Fale agora (modo contínuo)</span>';
+        } catch (e) {
+            status.innerHTML = '<span class="error">Erro ao iniciar microfone.</span>';
+        }
+    }
+
+    function stopListening() {
+        if (recognition) {
+            recognition.stop();
+        }
+        isListening = false;
+        btnLigar.style.display = 'block';
+        btnParar.style.display = 'none';
+        status.innerHTML = '<span class="ready">Microfone desligado</span>';
+    }
+
+    btnLigar.addEventListener('click', startListening);
+    btnParar.addEventListener('click', stopListening);
+
+    recognition.onresult = async (event) => {
+        const textoDito = event.results[event.results.length - 1][0].transcript.trim();
+        if (!textoDito) return;
+
+        originalDisplay.textContent = textoDito;
+        status.innerHTML = '<span class="translating">Traduzindo...</span>';
+
+        const targetLang = langOutputSelect.value;
+
+        try {
+            // Tenta com detecção automática
+            let res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(textoDito)}&langpair=auto|${targetLang}`);
+            let data = await res.json();
+            let traducao = data.responseData.translatedText;
+
+            // Se der erro ou tradução igual ao original, tenta com idioma selecionado
+            if (!traducao || traducao === textoDito || traducao.includes("INVALID")) {
+                const sourceLang = langInputSelect.value;
+                res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(textoDito)}&langpair=${sourceLang}|${targetLang}`);
+                data = await res.json();
+                traducao = data.responseData.translatedText;
+            }
+
+            traduzidoDisplay.textContent = traducao || '-';
+            falarTexto(traducao, targetLang);
+        } catch (err) {
+            status.innerHTML = '<span class="error">Erro na tradução</span>';
+            console.error(err);
+        }
+    };
+
+    recognition.onend = () => {
+        if (isListening) {
+            // Reinicia automaticamente no modo contínuo
+            setTimeout(() => {
+                if (isListening) startListening();
+            }, 300);
+        } else {
+            btnLigar.style.display = 'block';
+            btnParar.style.display = 'none';
+        }
+    };
+
+    recognition.onerror = (event) => {
+        console.error('Erro de reconhecimento:', event.error);
+        if (isListening) {
+            setTimeout(() => {
+                if (isListening) startListening();
+            }, 500);
+        }
+    };
+
+    function falarTexto(texto, lang) {
+        if (!('speechSynthesis' in window)) return;
+
+        const utterance = new SpeechSynthesisUtterance(texto);
+        utterance.lang = lang;
+        utterance.rate = 1.05;
+        utterance.pitch = 1;
+
+        window.speechSynthesis.speak(utterance);
+    }
+</script>
+</body>
+</html>
